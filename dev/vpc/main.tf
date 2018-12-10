@@ -1,5 +1,9 @@
 terraform {
   required_version = ">= 0.11.8"
+
+  backend "local" {
+    path = "../terraform.tfstate"
+  }
 }
 
 variable "aws_region" {}
