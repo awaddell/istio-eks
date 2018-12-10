@@ -1,6 +1,19 @@
 terraform {
   required_version = ">= 0.11.8"
 }
+provider "aws" {
+  region  = "${var.aws_region}"
+  version = "~> 1.51"
+}
+provider "local" {
+  version = "~> 1.1"
+}
+provider "null" {
+  version = "~> 1.0"
+}
+provider "template" {
+  version = "~> 1.0"
+}
 
 data "terraform_remote_state" "vpc" {
   backend = "local"
