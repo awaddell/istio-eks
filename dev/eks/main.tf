@@ -1,26 +1,32 @@
 terraform {
   required_version = ">= 0.11.8"
 }
+
 provider "aws" {
   region  = "${var.aws_region}"
   version = "~> 1.51"
 }
+
 provider "local" {
   version = "~> 1.1"
 }
+
 provider "null" {
   version = "~> 1.0"
 }
+
 provider "template" {
   version = "~> 1.0"
 }
 
 data "terraform_remote_state" "vpc" {
   backend = "local"
-  config{
+
+  config {
     path = "../terraform.tfstate"
   }
 }
+
 variable "cluster_name" {}
 variable "environment" {}
 variable "aws_region" {}
@@ -29,7 +35,7 @@ module "eks" {
   source       = "terraform-aws-modules/eks/aws"
   version      = "1.8.0"
   cluster_name = "${var.cluster_name}"
-  subnets = ["${data.terraform_remote_state.vpc.private_subnets}"]
+  subnets      = ["${data.terraform_remote_state.vpc.private_subnets}"]
 
   workers_group_defaults = {
     ami_id               = "ami-0f54a2f7d2e9c88b3" # AMI ID for the eks workers. If none is provided, Terraform will search for the latest version of their EKS optimized worker AMI.
