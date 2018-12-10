@@ -9,6 +9,8 @@ data "terraform_remote_state" "vpc" {
   }
 }
 variable "cluster_name" {}
+variable "environment" {}
+variable "aws_region" {}
 
 module "eks" {
   source       = "terraform-aws-modules/eks/aws"
