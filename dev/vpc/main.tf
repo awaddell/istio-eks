@@ -8,7 +8,9 @@ provider "aws" {
   region  = "${var.aws_region}"
   version = "~> 1.51"
 }
+
 data "aws_availability_zones" "available" {}
+
 module "vpc" {
   source          = "terraform-aws-modules/vpc/aws"
   version         = "1.46.0"
