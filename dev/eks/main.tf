@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 0.11.10"
+  backend          "local"          {}
 }
 
 provider "aws" {
@@ -23,7 +24,7 @@ data "terraform_remote_state" "vpc" {
   backend = "local"
 
   config {
-    path = "../vpc/terraform.tfstate"
+    path = "${var.environment}/vpc/terraform.tfstate"
   }
 }
 

@@ -1,5 +1,10 @@
 terraform {
   required_version = ">= 0.11.10"
+  backend          "local"          {}
+}
+
+data "terraform_remote_state" "eks" {
+  backend = "local"
 }
 
 variable "aws_region" {}
