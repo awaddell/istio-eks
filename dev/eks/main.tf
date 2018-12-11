@@ -33,7 +33,7 @@ variable "aws_region" {}
 
 module "eks" {
   source       = "terraform-aws-modules/eks/aws"
-  version      = "${var.eks_module_version}"
+  version      = "1.8.0"
   cluster_name = "${var.cluster_name}"
   subnets      = ["${data.terraform_remote_state.vpc.private_subnets}"]
 

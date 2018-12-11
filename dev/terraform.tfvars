@@ -10,9 +10,6 @@ eks_ami_id = "ami-0f54a2f7d2e9c88b3"
 # instance type for the eks workers
 eks_instance_type = "t2.small"
 
-# eks module version to download
-eks_module_version = "1.8.0"
-
 # ssh key (already uploaded to AWS) for the eks workers
 eks_ssh_key = "eks-worker"
 
