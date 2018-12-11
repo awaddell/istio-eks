@@ -55,6 +55,7 @@ module "eks" {
     additional_userdata  = ""                         # userdata to append to the default userdata.
     ebs_optimized        = true                       # sets whether to use ebs optimization on supported types.
     public_ip            = false                      # Associate a public ip address with a worker
+    autoscaling_enabled  = true                       # Sets whether policy and matching tags will be added to allow autoscaling.
   }
 
   tags = "${
