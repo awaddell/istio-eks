@@ -30,6 +30,13 @@ data "terraform_remote_state" "vpc" {
 variable "cluster_name" {}
 variable "environment" {}
 variable "aws_region" {}
+variable "eks_ami_id" {}
+
+variable "eks_instance_type" {
+  default = "t2.micro"
+}
+
+variable "eks_ssh_key" {}
 
 module "eks" {
   source       = "terraform-aws-modules/eks/aws"
