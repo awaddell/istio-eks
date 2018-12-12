@@ -5,51 +5,139 @@
 - Kubernetes speeds deployments and provides a declarative configuration enabling a GitOps workflow.
 - AWS EKS provides a managed Kubernetes cluster
 - Terraform is a GitOps-friendly and well-known way to standup a VPC and EKS cluster
-- Helm will assist with packaging Kubernetes deployments
+- Helm packages and deploys Kubernetes deployments
 - Istio will provide security within a service mesh  where we replace the 'perimeter and segments' paradigm that goes hand-in-hand with managing IP addresses and network paths, and instead, use a services paradigm where all services in the mesh verify their identify and use mutual TLS for authentication and encryption.
 
 Finally, we will standup components representing a traditional 3-tier archetecture withing the mesh
-- Db (mysql from helm)
-- App (one or more simple backend apps)
-- Web (a L7 tier to do simple manipulation)
+- Db (mysql from Helm)
+- App (one or more simple microservices)
+- Web (L7 manipulation with Istio)
 
-And we will provide a load-balancer from Amazon as ingress for the application.
+## Components
 
+- Terraform 0.11.10
+- Kubernetes CLI (kubectl) 1.10.7
+  - aws-iam-authenticator for RBAC
+- Helm 2.12
+- Istio 1.0.4
 
 ## Infrastructure Components
 - Infrastructure build with Terraform
   - VPC and EKS components
-  - Leverage terraform-aws modules for the heavy-lifting
-  - Apply requisite IAM roles
-  - Creates kubeconfig
+    - Leverage terraform-aws modules for the heavy-lifting
+    - Apply IAM roles
+    - Creates NAT GW
+    - Creates kubeconfig
+
+NB Not providing a bastion for access as 
+- we don't neeed SSH access to nodes
+- a bastion can be stood up and torn down on-demand as a separate exercise
 
 ## Kubernetes Components
 - Helm for deployments
 - Istio for security 
 
-
 Prerequisites:
 
-Account in us-west-2
-key pair in the target region called 'eks-worker'  (or change the template)
+- Account in us-west-2 (corresponding with the AMI used)
+- key pair in the target region called 'eks-worker'  (or change the template)
+- AWS CLI profile configured for above account
 
-AWS CLI
-aws-iam-authenticator
+### Install the aws-iam-authenticator
 ```shell
 go get -u -v \
 github.com/kubernetes-sigs/aws-iam-authenticator/cmd/aws-iam-authenticator
 ```
 
-- Terraform 0.11.10
-- Kubernetes CLI (kubectl) 1.10.7
-- Helm 2.12
-- Istio 1.0.4
+export the AWS profile to the environment
+
+    export AWS_PROFILE=demo
+
+### Initialise terraform modules, backend and providers for the vpc module
+
+```shell
+cd <root_of_repo>
+terraform init dev/vpc/
+```
+
+### Install the VPC component
+
+```shell
+terraform plan \
+--var-file=dev/terraform.tfvars \
+-state=dev/vpc/terraform.tfstate \
+dev/vpc/ 
+
+terraform apply \
+--var-file=dev/terraform.tfvars \
+-state=dev/vpc/terraform.tfstate \
+dev/vpc/
+```
+
+### Initialise terraform modules, backend and providers for the eks module
+
+```shell
+cd <root_of_repo>
+terraform init dev/eks/
+```
+
+### Install the EKS component
+
+```shell
+terraform plan \
+--var-file=dev/terraform.tfvars \
+-state=dev/eks/terraform.tfstate \
+dev/eks/    
+
+terraform apply \
+--var-file=dev/terraform.tfvars \
+-state=dev/eks/terraform.tfstate \
+dev/eks/  
+```
+
+*I deployed the above successfully four times and then, on the fifth deployment got a 400 error from the AWS API which was resolved by running the plan and apply again (for eks)*
+
+After successful deployment of EKS, configure the KUBECONTEXT
+
+(Still from the root of the repo)
+
+```shell
+export KUBECONFIG=$(pwd)/kubeconfig_demo-dev-cluster
+```
+
+Verify API access to the cluster:
+
+```
+kubectl cluster-info
+
+kubectl get nodes
+
+kubectl get pods --all-namespaces
+```
+
+Note that kubectl still relies on the exported AWS_PROFILE (for the aws-iam-authenticator to fetch RBAC permissions)
+
+Without it, you'll get an error like
+
+*could not get token: NoCredentialProviders: no valid providers in chain. Deprecated.
+        For verbose messaging see aws.Config.CredentialsChainVerboseErrors
+Unable to connect to the server: getting token: exec: exit status 1*
+
+## Helm
+
+Install helm locally per https://docs.helm.sh/using_helm/#installing-helm
+
+Do not install Tiller at this point.
+
+## Istio
+
+Fetch the latest Istio release
 
 ```shell
 curl -L https://git.io/getLatestIstio | sh -
 cd istio-1.*
 ```
-From the Istio root dir, install the service account for Helm
+**From the Istio root dir**, install the service account for Helm and initialise Helm
 
 ```
 kubectl create -f install/kubernetes/helm/helm-service-account.yaml
@@ -57,15 +145,67 @@ kubectl create -f install/kubernetes/helm/helm-service-account.yaml
 helm init --service-account tiller 
 ```
 
+Verify that Tiller pod and service is running 
+
+```shell
+kubectl get pod --namespace kube-system
+kubectl get pod, svc --namespace kube-system
+```
+
+Install Istio to the cluster
+
+NB I had an issue that heml complains crd already exists.
+At this stage, I am trying to work around it with 
+
+
+### Default: does not currently work for me
 ```shell
 helm install \
     --wait \
     --name istio \
     --namespace istio-system \
     install/kubernetes/helm/istio
-
-kubectl label namespace default istio-injection=enabled
 ```
+
+### Workaround: 
+
+#### Install the CRDs first
+
+    kubectl apply -f install/kubernetes/helm/istio/templates/crds.yaml 
+
+#### Install Istio using '--no-crd-hook'
+
+```shell
+helm install \
+--no-crd-hook \
+--wait \
+--name istio \
+--namespace istio-system \
+install/kubernetes/helm/istio
+```
+    kubectl label namespace default istio-injection=enabled
+
+
+If you still get 
+
+```
+Error: release istio failed: customresourcedefinitions.apiextensions.k8s.io "bypasses.config.istio.io" already exists
+```
+
+then you've hit the same issue
+
+cleanup the deployment
+
+```shell
+helm ls --all
+helm delete --purge istio
+```
+
+This should delete all the crds but, for good measure, 
+
+    kubectl delete -f install/kubernetes/helm/istio/templates/crds.yaml -n istio-system
+
+#### A Successful Istio installation
 
 ```shell
 kubectl get pods -n istio-system
@@ -81,57 +221,18 @@ istio-telemetry-748d58f6c5-l8b4q          2/2       Running   0          13h
 prometheus-f556886b8-48nj5                1/1       Running   0          13h
 ```
 
-
-
-# Initialise terraform modules, backend and providers
-cd <root_of_repo>
-for i in vpc eks; do terraform init dev/$i;done
-
-# run terraform from root of repo
-AWS_PROFILE=demo terraform plan    --var-file=dev/terraform.tfvars dev/vpc/
-AWS_PROFILE=demo terraform apply   --var-file=dev/terraform.tfvars dev/vpc/
-AWS_PROFILE=demo terraform destroy --var-file=dev/terraform.tfvars
-
-
-AWS_PROFILE=demo kubectl --insecure-skip-tls-verify=true --kubeconfig kubeconfig_demo-dev-cluster cluster-info
-AWS_PROFILE=demo kubectl --insecure-skip-tls-verify=true --kubeconfig kubeconfig_demo-dev-cluster get nodes
-AWS_PROFILE=demo kubectl --insecure-skip-tls-verify=true --kubeconfig kubeconfig_demo-dev-cluster get pods --all-namespaces
-
-You can verify the worker nodes are joining the cluster via: kubectl get nodes --watch 
-
-
-terraform init -input=false to initialize the working directory.
-terraform plan -out=tfplan -input=false to create a plan and save it to the local file tfplan.
-terraform apply -input=false tfplan to apply the plan stored in the file tfplan. 
-
-
-cd /
-terraform init dev/vpc/ 
-AWS_PROFILE=demo terraform plan   --var-file=dev/terraform.tfvars -state=dev/vpc/terraform.tfstate dev/vpc/ 
-AWS_PROFILE=demo terraform apply  --var-file=dev/terraform.tfvars -state=dev/vpc/terraform.tfstate dev/vpc/   
-
-terraform init dev/eks/ 
-AWS_PROFILE=demo terraform plan   --var-file=dev/terraform.tfvars -state=dev/eks/terraform.tfstate dev/eks/    
-AWS_PROFILE=demo terraform apply  --var-file=dev/terraform.tfvars -state=dev/eks/terraform.tfstate dev/eks/    
-
-
-export AWS_PROFILE=demo
-export KUBECONFIG=$(pwd)/kubeconfig_demo-dev-cluster
-
-## helm
-
-install helm locally
-
-verify and asset tiller not installed
-
-> helm version
-Client: &version.Version{SemVer:"v2.12.0", GitCommit:"d325d2a9c179b33af1a024cdb5a4472b6288016a", GitTreeState:"clean"}
-Error: could not find tiller
-
-## Istio
-
-
-
 ## Cleanup
 
-AWS_PROFILE=demo terraform destroy   --var-file=dev/terraform.tfvars -state=dev/eks/terraform.tfstate dev/eks/ 
+```shell
+cd <root of repo>
+
+terraform destroy \
+--var-file=dev/terraform.tfvars \
+-state=dev/eks/terraform.tfstate \
+dev/eks/ 
+
+terraform destroy \
+--var-file=dev/terraform.tfvars \
+-state=dev/vpc/terraform.tfstate \
+dev/vpc/
+```
